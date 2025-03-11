@@ -1,17 +1,24 @@
 import express from 'express';
 import 'dotenv/config'
+import connectToDb from './Config/dbConnect.js';
+import authenticationRouter from './Routers/authenticationRouter.js';
 
 const app=express();
 
 app.use(express.json());
 
 
-const portNum=process.env.PORT_NUM || 90000;
+// ---------------Db Connect Function
+connectToDb();
 
-app.get("/",(req,res)=>{
+// ----------all routes --------------------------------
 
-    res.send("Hello World!");
-});
+app.use('/user',authenticationRouter);
+
+
+
+
+const portNum=process.env.PORT_NUM || 9000;
 
 app.listen(portNum,()=>{
     console.log(`Server is running on port ${portNum}`);
