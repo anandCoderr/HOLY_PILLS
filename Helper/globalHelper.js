@@ -14,6 +14,7 @@ const successHelper=(res,message="Success",status=200,data={})=>{
 
 
 const errorHelper=(res,error)=>{
+  // console.log("error helper:---->",error);
 
     const message=error.message || "Server Error";
     const statusCode=error.statusCode || error.status || 500;

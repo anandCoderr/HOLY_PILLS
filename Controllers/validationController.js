@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import OtpModel from "../Models/OtpModel.js";
 import jwt from "jsonwebtoken";
 
+
 import {
   successHelper,
   errorHelper,
@@ -183,5 +184,35 @@ const loginOtpVerification = async (req, res) => {
     return errorHelper(res, err);
   }
 };
+
+
+// ------------check valid user via checking email is valid or not
+
+const checkValidEmail=async(req,res)=>{
+  try{
+
+    const{email}=req.body;
+
+    const rules={
+      email: "required"
+    };
+
+    const checkValid=await validatorHelper(req.body, rules);
+
+    if(!checkValid)
+    {
+      return errorHelper(res,checkValid.errors);
+    }
+
+    
+
+  }
+  catch(err){
+
+return errorHelper(res,err);
+  }
+};
+
+
 
 export { register, login,loginOtpVerification };
