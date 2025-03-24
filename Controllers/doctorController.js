@@ -4,6 +4,7 @@ import {
   successHelper,
   errorHelper,
   validatorHelper,
+  nodeMailerOtpHelper,
 } from "../Helper/globalHelper.js";
 
 const doctorRegistrations = async (req, res) => {
@@ -95,30 +96,31 @@ const blockDoctor = async (req, res) => {
 // --------get all doctor
 
 const getAllDoctor = async (req, res) => {
+  const { page = 1, limit = 10, id } = req.query;
+
   try {
-    const doctor = await DoctorModel.find({ status: true }).select("-password");
+    if (id) {
+      const doctor = await DoctorModel.findById(id).select("-password");
 
-    return successHelper(res, "All Doctor", 200, doctor);
-  } catch (err) {
-    return errorHelper(res, err);
-  }
-};
+      if (!doctor) {
+        return errorHelper(res, { message: "Doctor not found", status: 422 });
+      }
 
-// ----------get Specific doctor information
-
-const getDoctorInfo = async (req, res) => {
-  try {
-    const { id } = req.query;
-
-    const doctor = await DoctorModel.findById(id).select("-password");
-
-    if (!doctor) {
-      return errorHelper(res, { message: "Doctor not found", status: 422 });
+      return successHelper(res, "Doctor information", 200, doctor);
     }
 
-    return successHelper(res, "Doctor information", 200, doctor);
+    if (page && limit) {
+      const skip = (page - 1) * limit;
+
+      const [count, docs] = await Promise.all([
+        DoctorModel.countDocuments(),
+        DoctorModel.find().skip(parseInt(skip)).limit(parseInt(limit)),
+      ]);
+
+      return successHelper(res, "Pagination Doctor", 200, { docs, count });
+    }
   } catch (err) {
-    errorHelper(res, err);
+    return errorHelper(res, err);
   }
 };
 
@@ -130,7 +132,7 @@ const setAppointments = async (req, res) => {
     const { startDate, endDate } = req.body;
 
     if (id && slotId && day) {
-      // Use `$pull` to remove the object from the specified day's array
+      // Using `$pull` to remove the object from the specified day's array
       const doctor = await DoctorModel.findByIdAndUpdate(
         id,
         { $pull: { [`slots.${day}`]: { _id: slotId } } },
@@ -141,7 +143,6 @@ const setAppointments = async (req, res) => {
         return errorHelper(res, { message: "Doctor not found", status: 422 });
       }
 
-      // Step 2: Check if the array is empty and remove the field
       if (doctor.slots[day] && doctor.slots[day].length === 0) {
         await DoctorModel.findByIdAndUpdate(
           id,
@@ -203,10 +204,12 @@ const setAppointments = async (req, res) => {
   }
 };
 
+
+
 export {
   doctorRegistrations,
   blockDoctor,
   getAllDoctor,
-  getDoctorInfo,
   setAppointments,
+
 };

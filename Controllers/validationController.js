@@ -13,13 +13,14 @@ import {
 
 const register = async (req, res) => {
   try {
-    const { name, email, password, phone, avatarImg } = req.body;
+    const { name, email, password, phone, avatarImg,country } = req.body;
 
     const rules = {
       name: "required|min:3",
       email: "required|email",
       password: "required",
       phone: "required",
+      country: "required",
     };
 
     const checkValid = await validatorHelper(req.body, rules);
@@ -51,6 +52,7 @@ const register = async (req, res) => {
       password,
       phone,
       profileImg: defaultSetImg,
+      country
     });
 
     await user.save();
@@ -128,8 +130,8 @@ const login = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    return successHelper(res, "User Login Successfully", 200, {
-      user,
+    return successHelper(res, "Sent Otp to verify for Login", 200, {
+      otp,
     });
   } catch (err) {
     return errorHelper(res, err);
@@ -154,6 +156,8 @@ const loginOtpVerification = async (req, res) => {
       return errorHelper(res, checkValid.errors);
     }
 
+    // --------------otp verification in temporary model ------------------------------
+
     const otpData = await OtpModel.findOne({
       $and: [{ emailOrNum: mailOrNumVar }, { otp }],
     });
@@ -174,7 +178,7 @@ const loginOtpVerification = async (req, res) => {
     }
 
     // -----------converting into jwt token
-    var token = jwt.sign({ userId: checkUser._id }, process.env.SECREAT_KEY);
+    var token = jwt.sign({ userId: checkUser._id, userCountry:checkUser.country }, process.env.SECREAT_KEY);
 
     return successHelper(res, "User Login Successfully", 200, {
       user: checkUser,
@@ -186,33 +190,234 @@ const loginOtpVerification = async (req, res) => {
 };
 
 
-// ------------check valid user via checking email is valid or not
+// ------------------ Change passwords ----------------
 
-const checkValidEmail=async(req,res)=>{
-  try{
 
-    const{email}=req.body;
+const changePassword = async (req, res) => {
+  const { oldPass, newPassword, confirmNewPass } = req.body;
+  const loggedInUser = req.userId;
 
-    const rules={
-      email: "required"
+
+  // ---- from auth we will get user id
+
+
+  try {
+    const rules = {
+      oldPass: "required",
+      newPassword: "required",
+      confirmNewPass: "required",
     };
 
-    const checkValid=await validatorHelper(req.body, rules);
-
-    if(!checkValid)
-    {
-      return errorHelper(res,checkValid.errors);
+    const validationCheck = await validatorHelper(req.body, rules);
+    if (!validationCheck.success) {
+      return errorHelper(res, validationCheck.errors);
     }
 
-    
+// --------------validation check
 
-  }
-  catch(err){
 
-return errorHelper(res,err);
+    const user = await RegisterModel.findById(loggedInUser);
+
+    const oldPassEnc = await bcrypt.compare(oldPass, user.password);
+
+    if (!oldPassEnc) {
+      return errorHelper(res, {
+        message: "Old Password is incorrect",
+        status: 422,
+      });
+    }
+
+    if (newPassword !== confirmNewPass) {
+      return errorHelper(res, {
+        message: "New Password and Confirm Password do not match",
+        status: 422,
+      });
+    }
+
+    const passEnc = await bcrypt.hash(newPassword, 10);
+
+    const confirmedPass = await RegisterModel.findByIdAndUpdate(
+      loggedInUser,
+      { $set: { password: passEnc } },
+      { new: true }
+    );
+
+    return successHelper(
+      res,
+      "Password changed successfully",
+      200,
+      confirmedPass
+    );
+  } catch (err) {
+    return errorHelper(res, err);
   }
 };
 
 
 
-export { register, login,loginOtpVerification };
+// ---------- forgot password ----------------
+
+
+
+const forgotPassword = async (req, res) => {
+  try {
+    const { emailOrNum } = req.body;
+
+    // -------------------validation check
+    const rules = {
+      emailOrNum: "required",
+    };
+
+    const validationCheck = await validatorHelper(req.body, rules);
+    if (!validationCheck.success) {
+      return errorHelper(res, validationCheck.errors);
+    }
+
+// ---------------otp code starts here --------------------
+
+        const userFindInstant=isNaN(emailOrNum) ? { email: emailOrNum } : { phone: emailOrNum };
+
+
+
+    const user = await RegisterModel.findOne(userFindInstant);
+
+
+    if (!user) {
+      return errorHelper(res, { message: "User not found", status: 422 });
+    }
+
+    // ----for email only
+    const otp = Math.floor(100000 + Math.random() * 900000);
+
+    console.log(`your otp is:----> ${otp}`);
+
+    const transportInstance = nodeMailerOtpHelper(
+      emailOrNum,
+      "Email Verification Otp",
+      `Your email verification Opt is:- ${otp}`
+    );
+
+    if (!transportInstance) {
+      return errorHelper(res, { message: "Error sending OTP", status: 500 });
+    }
+
+    await OtpModel.findOneAndUpdate(
+      { emailOrNum: emailOrNum },
+      { otp },
+      { upsert: true, new: true }
+    );
+
+    return successHelper(res, "Otp Sent Successfully", 200);
+  } catch (err) {
+    return errorHelper(res, err);
+  }
+};
+
+
+// ---------------------reset password
+
+const verifyOtpForPassword=async(req,res)=>{
+
+  try{
+
+    const { otp, emailOrNum } = req.body;
+
+    const rules={
+      otp: "required",
+      emailOrNum: "required",
+    }
+    const validationCheck = await validatorHelper(req.body, rules);
+
+    if(!validationCheck.success){
+
+      return errorHelper(res,validationCheck.errors);
+
+    }
+
+
+    // const typeConversion =
+    // typeof emailOrNum === "string" && emailOrNum?.includes("@")
+    //     ? emailOrNum
+    //     : parseInt(emailOrNum,10);
+
+
+        const verifiedOtp=await OtpModel.findOne({$and:[{otp},{emailOrNum:emailOrNum}]});
+
+        if(!verifiedOtp){
+
+          return errorHelper(res,{message:"Invalid OTP",status:422});
+
+        }
+
+        return successHelper(res,"Otp Verified",200);
+
+
+  }catch(err){
+
+    return errorHelper(res,err);
+  }
+
+}
+
+// -------------get new password to reset password
+
+
+const resetPassword=async(req,res)=>{
+
+  try{
+
+    const {newPassword,confirmNewPass,emailOrNum}=req.body;
+
+    const rules={
+      newPassword: "required",
+      confirmNewPass: "required",
+      emailOrNum: "required",
+    }
+
+    const validationCheck = await validatorHelper(req.body, rules);
+
+    if(!validationCheck.success){
+
+      return errorHelper(res,validationCheck.errors);
+
+    }
+
+
+
+    if (newPassword !== confirmNewPass) {
+      return errorHelper(res, {
+        message: "New Password and Confirm Password do not match",
+        status: 422,
+      });
+    }
+
+    const obj=isNaN(emailOrNum) ? {email:emailOrNum} : {phone:emailOrNum}
+
+    const passEnc = await bcrypt.hash(newPassword, 10);
+
+    const confirmedPass = await RegisterModel.findOneAndUpdate(
+      obj,
+      { $set: { password: passEnc } },
+      { new: true }
+    );
+
+    return successHelper(
+      res,
+      "Password changed successfully",
+      200,
+      confirmedPass
+    );
+
+
+  }catch(err){
+    return errorHelper(res,err);
+  }
+
+
+}
+
+
+
+
+
+export { register, login,loginOtpVerification,changePassword,forgotPassword,verifyOtpForPassword,resetPassword };

@@ -23,6 +23,10 @@ const registerSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    country:{
+      type: String,
+      required: true,
+    }
   },
   {
     timestamps: true,

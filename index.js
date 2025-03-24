@@ -2,6 +2,7 @@ import express from 'express';
 import 'dotenv/config'
 import connectToDb from './Config/dbConnect.js';
 import authenticationRouter from './Routers/authenticationRouter.js';
+import adminRouter from './Routers/adminRouter.js';
 
 const app=express();
 
@@ -14,6 +15,7 @@ connectToDb();
 // ----------all routes --------------------------------
 
 app.use('/user',authenticationRouter);
+app.use('/admin',adminRouter);
 
 
 
